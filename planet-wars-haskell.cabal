@@ -1,0 +1,14 @@
+name: planet-wars-haskell
+version: 0.0.0.1
+description: Unofficial Haskell starter package for the Google AI contest.
+license: OtherLicense
+license-file: LICENSE
+
+build-type: Simple
+Cabal-Version: >= 1.2
+
+Executable exampleBot
+        hs-source-dirs: .
+        main-is: Main.hs
+        build-depends: base ==4.*
+                     , containers ==0.3.*
