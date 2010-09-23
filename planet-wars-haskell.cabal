@@ -7,8 +7,19 @@ license-file: LICENSE
 build-type: Simple
 Cabal-Version: >= 1.2
 
-Executable exampleBot
-        hs-source-dirs: .
-        main-is: Main.hs
+Executable AzBot
+        hs-source-dirs: ./v-olathe, ./v-olathe/mybots
+        main-is: AzBot.hs
         build-depends: base ==4.*
                      , containers ==0.3.*
+                     , bytestring
+                     , array
+
+Executable MyBot
+        hs-source-dirs: ./v-olathe, ./v-olathe/mybots
+        main-is: MyBot.hs
+        build-depends: base ==4.*
+                     , containers ==0.3.*
+                     , bytestring
+                     , array
+
