@@ -47,8 +47,8 @@ fAzBot planets fleets =
     if null myPlanets || null notMyPlanets || null candidates || (not . null . drop maxFleetsM1 $ myFleets)
        then []
        else 
-         -- [newFleet source target (div (ships source) 2)]
-         map (\src -> newFleet src target (div (ships source) 2)) sources
+         --[newFleet source target (div (ships source) 2)]
+         map (\src -> newFleet src target (div (ships src) 2)) sources
 
 score :: Planet -> Double
 score p = fromIntegral (ships p)/(1 + fromIntegral (production p))
