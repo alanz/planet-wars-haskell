@@ -2,6 +2,7 @@
 
 # Run a bot against the tcp server.
 # See http://www.benzedrine.cx/planetwars/
+# my url http://72.44.46.68/getplayer?player=alan_zimm
 
 export CFG=./$LOGNAME.cfg
 export MY_BOT="./dist/build/AzBot/AzBot"
@@ -9,8 +10,11 @@ export MY_BOT="./dist/build/AzBot/AzBot"
 . $CFG
 #echo $PASSWORD
 
+#export DEBUG=-d
+export DEBUG=
+
 #./tools/tcp 72.44.46.68 995 alan_zimm -p $PASSWORD $MY_BOT
-java -jar tools/TCP.jar -d 72.44.46.68 995  alan_zimm -p $PASSWORD $MY_BOT
+java -jar tools/TCP.jar $DEBUG 72.44.46.68 995  alan_zimm -p $PASSWORD $MY_BOT
 
 
 # PlanetWars tester TCP edition

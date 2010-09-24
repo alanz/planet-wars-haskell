@@ -6,16 +6,27 @@ import PlanetWars
 import Data.Ord       (comparing)
 import Data.List      (partition, minimumBy, maximumBy)
 import Control.Monad  (forever, when, unless)
+import Debug.Trace
 
 -- ---------------------------------------------------------------------
 {-
 Strategy
 
 1. Choose an appropriate target
-   a. No change for now.
+
+1.a make some sort of impact measure, of potential gain, force needed, and time to achieve.
 
 2. Fire fleets from all available planets
 
+3. Use only the requisite force: send just enough to take the planet,
+   bearing in mind the amount sent from the baddies,
+   and growth rate x time of arrival
+
+-  Do not target a planet if it is already being targeted with sufficient force
+
+-. Current targeting sometimes chooses a planet already in my hands?
+
+-. Look at defending my own planets that are under attack
 
 -}
 
@@ -33,25 +44,47 @@ fAzBot planets fleets =
                               
     (maxFleetsM1, candidates) = if myShips > enemyShips
                                 then if myProduction > enemyProduction
-                                     then (0, enemyPlanets) -- I have more ships now, and producing more
-                                     else (2, notMyPlanets) -- I have more ships now, but producing less
+                                     then (6, enemyPlanets) -- I have more ships now, and producing more: allow 0 fleets
+                                     else (4, notMyPlanets) -- I have more ships now, but producing less: allow 2 fleets
                                 else if myProduction > enemyProduction
-                                     then (0, notMyPlanets) -- Fewer ships, but producing more
-                                     else (4, notMyPlanets) -- Fewer ships, and producing less
+                                     then (6, notMyPlanets) -- Fewer ships, but producing more: allow 0 fleets
+                                     else (4, notMyPlanets) -- Fewer ships, and producing less: allow 4 fleets
                               
     source = maximumBy (comparing score) myPlanets
-    sources = myPlanets
+    sources = filter (\planet -> ships planet > 5) myPlanets
     target = minimumBy (comparing score) candidates
+    
+    src = head myPlanets
+    sc2_candidates = map (\dst -> (planetID src,planetID dst,score2 src dst)) candidates
+    --debugStr = show(target)
+    debugStr = ("#" ++ show(sc2_candidates))
                           
   in 
-    if null myPlanets || null notMyPlanets || null candidates -- || (not . null . drop maxFleetsM1 $ myFleets)
+     if 
+       trace(debugStr) True || -- Must comment out this line when playing the TCP server
+       null myPlanets || null notMyPlanets || null candidates || (not . null . drop maxFleetsM1 $ myFleets)
        then []
        else 
          --[newFleet source target (div (ships source) 2)]
-         map (\src -> newFleet src target (div (ships src) 3)) sources
+         map (\src -> newFleet src target (div (ships src) 2)) sources
+
+-- ---------------------------------------------------------------------
 
 score :: Planet -> Double
 score p = fromIntegral (ships p)/(1 + fromIntegral (production p))
+
+-- ---------------------------------------------------------------------
+
+score2 :: Planet -> Planet -> Double
+score2 src dst = 
+  let
+    dist = fromIntegral (distance src dst)
+    pSuccess = if (ships src > ships dst) then (1.0) else ( (fromIntegral (ships src - 5)) / (fromIntegral (ships dst)))
+  in
+   --pSuccess * fromIntegral (score dst) * (1.5^(-dist))
+   pSuccess * (score dst) / (1.5^(dist))
+  
+-- ---------------------------------------------------------------------
 
 main = playAs fAzBot
 

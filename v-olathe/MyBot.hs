@@ -33,14 +33,14 @@ fAzBot planets fleets =
                               
     (maxFleetsM1, candidates) = if myShips > enemyShips
                                 then if myProduction > enemyProduction
-                                     then (0, enemyPlanets) -- I have more ships now, and producing more
-                                     else (2, notMyPlanets) -- I have more ships now, but producing less
+                                     then (6, enemyPlanets) -- I have more ships now, and producing more: allow 0 fleets
+                                     else (4, notMyPlanets) -- I have more ships now, but producing less: allow 2 fleets
                                 else if myProduction > enemyProduction
-                                     then (0, notMyPlanets) -- Fewer ships, but producing more
-                                     else (4, notMyPlanets) -- Fewer ships, and producing less
+                                     then (6, notMyPlanets) -- Fewer ships, but producing more: allow 0 fleets
+                                     else (4, notMyPlanets) -- Fewer ships, and producing less: allow 4 fleets
                               
     source = maximumBy (comparing score) myPlanets
-    sources = myPlanets
+    sources = filter (\planet -> ships planet > 5) myPlanets
     target = minimumBy (comparing score) candidates
                           
   in 

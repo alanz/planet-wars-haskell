@@ -23,3 +23,13 @@ Executable MyBot
                      , bytestring
                      , array
 
+
+Executable vis
+        hs-source-dirs: ./v-olathe, ./visualise
+        main-is: Main.hs
+        build-depends: base ==4.*
+                     , containers ==0.3.*
+                     , bytestring
+                     , array
+                     , diagrams
+

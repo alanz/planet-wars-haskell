@@ -9,7 +9,7 @@ module PlanetWars ( Player(Neutral, Me, Enemy), isMine, isNotMine, isNeutral, is
                   , TurnCount
                   , HasOwner, owner
                   , HasShips, ships
-                  , Planet, production, distance
+                  , Planet, production, distance, planetID
                   , Fleet, newFleet, source, target, turnsLeft
                   , Bot
                   , BotFunction  -- [Planet] -> [Fleet] -> [Fleet]
@@ -20,6 +20,11 @@ module PlanetWars ( Player(Neutral, Me, Enemy), isMine, isNotMine, isNeutral, is
   {- ShipCount -} , getProduction, getMyProduction, getNotMyProduction, getNeutralProduction, getEnemyProduction
   {- ()        -} , putFleet, endTurn
                   , playAs, playAs'
+                  -- For other purposes                            
+                  , parseGameState                            
+                  , Position(..), position
+                  , PlanetID(..)                
+                    
                   ) where
 
 import Data.Int    (Int16, Int32)
