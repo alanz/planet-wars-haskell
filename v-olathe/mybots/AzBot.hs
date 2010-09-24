@@ -52,7 +52,7 @@ fAzBot planets fleets =
                       
     fp = futurePlanets planets fleets                 
                  
-    candidates = fp
+    candidates = filter (\(p,_) -> not (isMine p)) $ Map.elems fp
                  
     source = maximumBy (comparing score) myPlanets
     sources = filter (\planet -> ships planet > 5) myPlanets
@@ -75,7 +75,7 @@ fAzBot planets fleets =
 
 targetsForSource src candidates = 
   let
-    sc2_candidates' = sortBy rank $ map (\(dst,cnt) -> (src,dst,score2 src dst cnt)) $ Map.elems candidates
+    sc2_candidates' = sortBy rank $ map (\(dst,cnt) -> (src,dst,score2 src dst cnt)) candidates
    
     cumulativeShips = tail $ scanl (+) 0 $ map (\(src,dst,_) -> 1 + (ships dst)) sc2_candidates'
     
