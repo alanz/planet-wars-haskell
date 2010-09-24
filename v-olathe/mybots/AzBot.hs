@@ -4,7 +4,7 @@
 
 import PlanetWars
 import Data.Ord       (comparing)
-import Data.List      (partition, minimumBy, maximumBy)
+import Data.List      (partition, minimumBy, maximumBy,sortBy)
 import Control.Monad  (forever, when, unless)
 import Debug.Trace
 
@@ -54,19 +54,26 @@ fAzBot planets fleets =
     sources = filter (\planet -> ships planet > 5) myPlanets
     target = minimumBy (comparing score) candidates
     
-    src = head myPlanets
-    sc2_candidates = map (\dst -> (planetID src,planetID dst,score2 src dst)) candidates
+    --src = head myPlanets
+    src = source
+    sc2_candidates' = sortBy rank $ map (\dst -> (src,dst,score2 src dst)) candidates
+   
+    cumulativeShips = tail $ scanl (+) 0 $ map (\(src,dst,_) -> 1 + (ships dst)) sc2_candidates'
+    
+    sc2_candidates = takeWhile (\(c,_) -> c < (ships src) - 5) $ zip cumulativeShips sc2_candidates'
+    
     --debugStr = show(target)
     debugStr = ("#" ++ show(sc2_candidates))
                           
+    rank (_,_,a) (_,_,b) = compare b a -- descending order of score
   in 
      if 
-       trace(debugStr) True || -- Must comment out this line when playing the TCP server
-       null myPlanets || null notMyPlanets || null candidates || (not . null . drop maxFleetsM1 $ myFleets)
+       -- trace(debugStr) True || -- Must comment out this line when playing the TCP server
+       null myPlanets || null notMyPlanets || null sc2_candidates || (not . null . drop maxFleetsM1 $ myFleets)
        then []
        else 
          --[newFleet source target (div (ships source) 2)]
-         map (\src -> newFleet src target (div (ships src) 2)) sources
+         map (\(_,(src,dst,_)) -> newFleet src dst ((ships dst) + 1)) sc2_candidates
 
 -- ---------------------------------------------------------------------
 
@@ -82,7 +89,7 @@ score2 src dst =
     pSuccess = if (ships src > ships dst) then (1.0) else ( (fromIntegral (ships src - 5)) / (fromIntegral (ships dst)))
   in
    --pSuccess * fromIntegral (score dst) * (1.5^(-dist))
-   pSuccess * (score dst) / (1.5^(dist))
+   (pSuccess / (score dst)) / (1.5^(dist))
   
 -- ---------------------------------------------------------------------
 
