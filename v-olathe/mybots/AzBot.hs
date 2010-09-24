@@ -54,22 +54,15 @@ fAzBot planets fleets =
     sources = filter (\planet -> ships planet > 5) myPlanets
     target = minimumBy (comparing score) candidates
     
-    --src = head myPlanets
-    src = source
-    sc2_candidates' = sortBy rank $ map (\dst -> (src,dst,score2 src dst)) candidates
-   
-    cumulativeShips = tail $ scanl (+) 0 $ map (\(src,dst,_) -> 1 + (ships dst)) sc2_candidates'
-    
-    sc2_candidates = takeWhile (\(c,_) -> c < (ships src) - 5) $ zip cumulativeShips sc2_candidates'
+    sc2_candidates = concatMap (\src -> targetsForSource src candidates) myPlanets
     
     --debugStr = show(target)
     debugStr = ("#" ++ show(sc2_candidates))
                           
-    rank (_,_,a) (_,_,b) = compare b a -- descending order of score
   in 
      if 
        -- trace(debugStr) True || -- Must comment out this line when playing the TCP server
-       null myPlanets || null notMyPlanets || null sc2_candidates || (not . null . drop maxFleetsM1 $ myFleets)
+       null myPlanets || null notMyPlanets || null sc2_candidates -- || (not . null . drop maxFleetsM1 $ myFleets)
        then []
        else 
          --[newFleet source target (div (ships source) 2)]
@@ -77,6 +70,21 @@ fAzBot planets fleets =
 
 -- ---------------------------------------------------------------------
 
+targetsForSource src candidates = 
+  let
+    sc2_candidates' = sortBy rank $ map (\dst -> (src,dst,score2 src dst)) candidates
+   
+    cumulativeShips = tail $ scanl (+) 0 $ map (\(src,dst,_) -> 1 + (ships dst)) sc2_candidates'
+    
+    sc2_candidates = takeWhile (\(c,_) -> c < (ships src) - 5) $ zip cumulativeShips sc2_candidates'
+  
+    
+    rank (_,_,a) (_,_,b) = compare b a -- descending order of score
+
+  in
+   sc2_candidates
+
+-- ---------------------------------------------------------------------
 score :: Planet -> Double
 score p = fromIntegral (ships p)/(1 + fromIntegral (production p))
 
