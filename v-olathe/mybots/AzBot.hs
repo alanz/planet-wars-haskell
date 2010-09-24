@@ -48,23 +48,14 @@ fAzBot planets fleets =
     myShips         = sum (map ships myPlanets)    + sum (map ships myFleets)
     enemyShips      = sum (map ships enemyPlanets) + sum (map ships enemyFleets)
                               
-    {-
-    (maxFleetsM1, candidates) = if myShips > enemyShips
-                                then if myProduction > enemyProduction
-                                     then (6, enemyPlanets) -- I have more ships now, and producing more: allow 0 fleets
-                                     else (4, notMyPlanets) -- I have more ships now, but producing less: allow 2 fleets
-                                else if myProduction > enemyProduction
-                                     then (6, notMyPlanets) -- Fewer ships, but producing more: allow 0 fleets
-                                     else (4, notMyPlanets) -- Fewer ships, and producing less: allow 4 fleets
-      -}                        
-    candidates = notMyPlanets                      
+    --candidates = notMyPlanets                      
                       
     fp = futurePlanets planets fleets                 
                  
+    candidates = fp
                  
     source = maximumBy (comparing score) myPlanets
     sources = filter (\planet -> ships planet > 5) myPlanets
-    -- target = minimumBy (comparing score) candidates
     
     sc2_candidates = concatMap (\src -> targetsForSource src candidates) myPlanets
     
@@ -84,7 +75,7 @@ fAzBot planets fleets =
 
 targetsForSource src candidates = 
   let
-    sc2_candidates' = sortBy rank $ map (\dst -> (src,dst,score2 src dst)) candidates
+    sc2_candidates' = sortBy rank $ map (\(dst,cnt) -> (src,dst,score2 src dst cnt)) $ Map.elems candidates
    
     cumulativeShips = tail $ scanl (+) 0 $ map (\(src,dst,_) -> 1 + (ships dst)) sc2_candidates'
     
@@ -103,10 +94,11 @@ score p = fromIntegral (ships p)/(1 + fromIntegral (production p))
 
 -- ---------------------------------------------------------------------
 
-score2 :: Planet -> Planet -> Double
-score2 src dst = 
+score2 :: Planet -> Planet -> ShipCount -> Double
+score2 src dst cnt = 
   let
-    shipsDst = ships dst
+    --shipsDst = ships dst
+    shipsDst = cnt
     dist = fromIntegral (distance src dst)
     pSuccess = if (ships src > shipsDst) then (1.0) else (1.0 * ( (fromIntegral (ships src - 5)) / (fromIntegral (shipsDst))))
   in
