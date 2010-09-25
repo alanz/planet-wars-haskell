@@ -126,7 +126,7 @@ score2 src dst cntMine cntEnemy
     shipsDstMine    = cntMine - cntEnemy + (ships dst)
     scoreMine = if (shipsDstMine > 5) then (0.0) else (scoreVal 1.0 (score shipsDstMine dst))
     
-    shipsDstEnemy   = cntMine - cntEnemy - (ships dst) + ((dist+1) * (production dst))
+    shipsDstEnemy   = cntMine - cntEnemy - (ships dst) - ((dist+1) * (production dst))
     
     shipsDstNeutral = cntMine - cntEnemy + (ships dst) -- TODO : proper calc, largest - sndlargest, toss 3rd
     
