@@ -29,12 +29,20 @@ Strategy
 -. Current targeting sometimes chooses a planet already in my hands?
 
 -. Look at defending my own planets that are under attack
+   - Perhaps include planets that will change hands in future, based on en-route fleets
 
 -. Currently, does not attack a target if there is no chance of victory in one salvo.
    Need to look at ganging up the attcks. http://72.44.46.68/canvas?game_id=141421
 
--}
+- Sometimes get stuck in no-hope strategy, need to bring an element of
+  randomness into the play. http://72.44.46.68/canvas?game_id=154010
 
+-}
+{-
+TODO:
+  Understand this game http://72.44.46.68/canvas?game_id=153948
+  against RageBot, only way to win is to first hit as hard as they do, or to do nothing. I think.
+-}
 
 fAzBot :: BotFunction  -- [Planet] -> [Fleet] -> [Fleet]
 fAzBot planets fleets = 
@@ -52,7 +60,7 @@ fAzBot planets fleets =
                       
     fp = futurePlanets planets fleets                 
                  
-    candidates = filter (\(p,_) -> not (isMine p)) $ Map.elems fp
+    candidates = {- filter (\(p,_,_) -> not (isMine p)) $ -} Map.elems fp
                  
     source = maximumBy (comparing score) myPlanets
     sources = filter (\planet -> ships planet > 5) myPlanets
@@ -75,7 +83,8 @@ fAzBot planets fleets =
 
 targetsForSource src candidates = 
   let
-    sc2_candidates' = sortBy rank $ map (\(dst,cnt) -> (src,dst,score2 src dst cnt)) candidates
+    sc2_candidates' = sortBy rank 
+                      $ map (\(dst,cntMine,cntEnemy) -> (src,dst,score2 src dst cntMine cntEnemy)) candidates
    
     cumulativeShips = tail $ scanl (+) 0 $ map (\(src,dst,_) -> 1 + (ships dst)) sc2_candidates'
     
@@ -94,38 +103,59 @@ score p = fromIntegral (ships p)/(1 + fromIntegral (production p))
 
 -- ---------------------------------------------------------------------
 
-score2 :: Planet -> Planet -> ShipCount -> Double
-score2 src dst cnt = 
-  let
-    --shipsDst = ships dst
-    shipsDst = cnt
+-- Higher score means a better/more pressing target
+score2 :: Planet -> Planet -> ShipCount -> ShipCount -> Double
+score2 src dst cntMine cntEnemy 
+  | isMine dst  = scoreMine
+  | isEnemy dst = scoreEnemy                 
+  | otherwise   = scoreNeutral                  
+  where
+    shipsDstMine    = cntMine - cntEnemy + (ships dst)
+    scoreMine = if (shipsDstMine > 5) then (0.0) else (scoreVal 1.0 (score dst))
+    
+    shipsDstEnemy   = cntMine - cntEnemy - (ships dst)
+    
+    shipsDstNeutral = cntMine - cntEnemy + (ships dst) -- TODO : proper calc, largest - sndlargest, toss 3rd
+    
     dist = fromIntegral (distance src dst)
-    pSuccess = if (ships src > shipsDst) then (1.0) else (1.0 * ( (fromIntegral (ships src - 5)) / (fromIntegral (shipsDst))))
-  in
-   --pSuccess * fromIntegral (score dst) * (1.5^(-dist))
-   (pSuccess / (score dst)) / (1.5^(dist))
+    pSuccess shipsDst = 
+      if (ships src > shipsDst) 
+        then (1.0) 
+        else (1.0 * ( (fromIntegral (ships src - 5)) / (fromIntegral (shipsDst))))
+
+    scoreVal ps s = (ps / s) / (1.5^(dist))
+
+    scoreEnemy   = scoreVal (pSuccess shipsDstEnemy)   (score dst)
+    scoreNeutral = scoreVal (pSuccess shipsDstNeutral) (score dst)
   
 -- ---------------------------------------------------------------------
 
-futurePlanets :: [Planet] -> [Fleet] -> Map.Map Planet (Planet, ShipCount)
+futurePlanets :: [Planet] -> [Fleet] -> Map.Map Planet (Planet, ShipCount, ShipCount)
 futurePlanets planets fleets =
   let
-    static = map (\p -> (p,ships p)) planets
-    --res = foldl' (\acc f -> )  static fleets
-    
-    start = foldl' (\m p -> Map.insert (p) (p,ships p) m) Map.empty planets
+    start = foldl' (\m p -> Map.insert (p) (p,0,0) m) Map.empty planets
     
     res = foldl' (\m f -> updateMap m f) start fleets
   in
     res
 
 -- ---------------------------------------------------------------------
-
+{-
+-- TODO: need to take into account which fleets are going to which planets.
+         Maybe keep a count of current as (cnt,owner), and then add tuples for
+         each of mine,enemy arrivals
+-}
+-- updateMap
+--   :: Map.Map Planet (Planet, ShipCount)
+--      -> Fleet
+--      -> Map.Map Planet (Planet, ShipCount)
 updateMap m f =
   let
     tgt = target f
-    (p,cnt) = m Map.! tgt
-    new = (p, cnt + (ships f))
+    (p,cntMine,cntEnemy) = m Map.! tgt
+    new = if (isMine f) 
+          then (p,cntMine + (ships f),cntEnemy)
+          else (p,cntMine,cntEnemy + (ships f))               
   in
    Map.insert p new m
 
