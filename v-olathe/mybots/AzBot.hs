@@ -47,6 +47,9 @@ Strategy
 - Phase approach: Make no move in first turn. Then hit the other
   player if they have left home base undefended
 
+- Modify the strategy when production is lower than enemy prod to make more production
+
+- Seem to have an off by one error in attacking enemy planets, due to production
 -}
 {-
 TODO:
@@ -113,11 +116,6 @@ targetsForSource fp src candidates =
 
 -- ---------------------------------------------------------------------
 
-score :: Planet -> Double
-score p = fromIntegral (ships p)/(1 + fromIntegral (production p))
-
--- ---------------------------------------------------------------------
-
 -- Higher score means a better/more pressing target
 score2 :: Planet -> Planet -> ShipCount -> ShipCount -> (Double, ShipCount)
 score2 src dst cntMine cntEnemy 
@@ -126,9 +124,9 @@ score2 src dst cntMine cntEnemy
   | otherwise   = (scoreNeutral, shipsDstNeutral)
   where
     shipsDstMine    = cntMine - cntEnemy + (ships dst)
-    scoreMine = if (shipsDstMine > 5) then (0.0) else (scoreVal 1.0 (score dst))
+    scoreMine = if (shipsDstMine > 5) then (0.0) else (scoreVal 1.0 (score shipsDstMine dst))
     
-    shipsDstEnemy   = cntMine - cntEnemy - (ships dst) + (dist * (production dst))
+    shipsDstEnemy   = cntMine - cntEnemy - (ships dst) + ((dist+1) * (production dst))
     
     shipsDstNeutral = cntMine - cntEnemy + (ships dst) -- TODO : proper calc, largest - sndlargest, toss 3rd
     
@@ -141,8 +139,12 @@ score2 src dst cntMine cntEnemy
     --scoreVal ps s = (ps / s) / (1.5^(dist))
     scoreVal ps s = (ps / s) / (1.1^(dist))
 
-    scoreEnemy   = scoreVal (pSuccess shipsDstEnemy)   (score dst)
-    scoreNeutral = scoreVal (pSuccess shipsDstNeutral) (score dst)
+    -- Lower score is better. Need to flip that some time
+    score :: ShipCount -> Planet -> Double
+    score sc p = fromIntegral (sc) / (1 + (fromIntegral (production p)**1.5))
+
+    scoreEnemy   = scoreVal (pSuccess shipsDstEnemy)   (score shipsDstEnemy dst)
+    scoreNeutral = scoreVal (pSuccess shipsDstNeutral) (score shipsDstNeutral dst)
   
 -- ---------------------------------------------------------------------
 
