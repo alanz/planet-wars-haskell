@@ -138,7 +138,8 @@ score2 src dst cntMine cntEnemy
         then (1.0) 
         else (1.0 * ( (fromIntegral (ships src - 5)) / (fromIntegral (shipsDst))))
 
-    scoreVal ps s = (ps / s) / (1.5^(dist))
+    --scoreVal ps s = (ps / s) / (1.5^(dist))
+    scoreVal ps s = (ps / s) / (1.1^(dist))
 
     scoreEnemy   = scoreVal (pSuccess shipsDstEnemy)   (score dst)
     scoreNeutral = scoreVal (pSuccess shipsDstNeutral) (score dst)
