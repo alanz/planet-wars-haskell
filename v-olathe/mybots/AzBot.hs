@@ -17,14 +17,14 @@ Strategy
 
 1.a make some sort of impact measure, of potential gain, force needed, and time to achieve.
 
-2. Fire fleets from all available planets
+*2. Fire fleets from all available planets
 
-3. Use only the requisite force: send just enough to take the planet,
+*3. Use only the requisite force: send just enough to take the planet,
    bearing in mind the amount sent from the baddies,
    and own fleets in flight
    and growth rate x time of arrival
 
--  Do not target a planet if it is already being targeted with sufficient force
+*-  Do not target a planet if it is already being targeted with sufficient force
 
 -. Current targeting sometimes chooses a planet already in my hands?
 
@@ -38,6 +38,14 @@ Strategy
   randomness into the play. http://72.44.46.68/canvas?game_id=154010
 
 - For an enemy planet, make allowance for production according to time of flight
+
+- Do not launch from a planet that has imminent inbound enemy stuff.
+
+- When choosing targets, rather toss the ones that are too big in
+  terms of firepower, and carry on with the list
+
+- Phase approach: Make no move in first turn. Then hit the other
+  player if they have left home base undefended
 
 -}
 {-
@@ -58,19 +66,14 @@ fAzBot planets fleets =
     myShips         = sum (map ships myPlanets)    + sum (map ships myFleets)
     enemyShips      = sum (map ships enemyPlanets) + sum (map ships enemyFleets)
                               
-    --candidates = notMyPlanets                      
-                      
     fp = futurePlanets planets fleets                 
                  
-    candidates = {- filter (\(p,_,_) -> not (isMine p)) $ -} Map.elems fp
+    candidates = Map.elems fp
                  
-    source = maximumBy (comparing score) myPlanets
-    sources = filter (\planet -> ships planet > 5) myPlanets
-    
-    sc2_candidates = concatMap (\src -> targetsForSource src candidates) myPlanets
+    sc2_candidates = concatMap (\src -> targetsForSource fp src candidates) myPlanets
     
     --debugStr = show(target)
-    debugStr = ("#" ++ show(sc2_candidates))
+    debugStr = ("#" ++ show(sc2_candidates) ++ "\n" ++ show(fp))
                           
   in 
      if 
@@ -83,15 +86,24 @@ fAzBot planets fleets =
 
 -- ---------------------------------------------------------------------
 
-targetsForSource src candidates = 
+targetsForSource fp src candidates = 
   let
+    fp_candidates = map (\(dst,cntMine,cntEnemy) -> (src,dst,score2 src dst cntMine cntEnemy)) candidates
+    
     sc2_candidates' = sortBy rank 
                       $ filter (\(_,_,(_,shipsDst)) -> shipsDst > 0)
-                      $ map (\(dst,cntMine,cntEnemy) -> (src,dst,score2 src dst cntMine cntEnemy)) candidates
+                      $ fp_candidates
    
     cumulativeShips = tail $ scanl (+) 0 $ map (\(_,_,(_,shipsDst)) -> 1 + shipsDst) sc2_candidates'
     
-    sc2_candidates = takeWhile (\(c,_) -> c < (ships src) - 5) $ zip cumulativeShips sc2_candidates'
+    -- TODO: Must be a more effective way
+    (_,_,(_,srcShips)) = head $ filter (\(_,d,_) -> src == d) fp_candidates
+    
+    srcShips' = min srcShips (ships src)
+    
+    --debugStr = "srcShips="++show(srcShips)
+    debugStr = "fp_candidates="++show(fp_candidates)
+    sc2_candidates = {-trace(debugStr) -} takeWhile (\(c,_) -> c < srcShips' - 5) $ zip cumulativeShips sc2_candidates'
   
     
     rank (_,_,(a,_)) (_,_,(b,_)) = compare b a -- descending order of score
@@ -170,7 +182,7 @@ main = playAs fAzBot
 
 test =
   let
-    (planets,fleets) = head $ parseGameState $ concat mapStr                      
+    (planets,fleets) = head $ parseGameState $ concat map449
   in
    fAzBot planets fleets
    
@@ -209,4 +221,32 @@ mapStr =
   "F 2 4 2 16 13 10\n"
   ]
   
+map449 =
+  [
+  "P 11.6977322659 10.2756927937 0 98 4\n",
+  "P 11.8819078411 19.3820370936 1 100 5\n",
+  "P 11.5135566907 1.1693484938 2 100 5\n",
+  "P 6.8415025020 10.1974977004 0 9 4\n",
+  "P 16.5539620298 10.3538878869 0 9 4\n",
+  "P 0.0000000000 4.3576188369 0 59 4\n",
+  "P 23.3954645318 16.1937667505 0 59 4\n",
+  "P 0.0935212635 17.8929435806 0 2 3\n",
+  "P 23.3019432683 2.6584420068 0 2 3\n",
+  "P 17.5328380324 0.0670805611 0 89 4\n",
+  "P 5.8626264994 20.4843050262 0 89 4\n",
+  "P 1.0449100440 2.3409295466 0 33 1\n",
+  "P 22.3505544878 18.2104560408 0 33 1\n",
+  "P 15.8613179512 16.7772678550 0 65 3\n",
+  "P 7.5341465806 3.7741177323 0 65 3\n",
+  "P 4.9429417536 0.0000000000 0 2 3\n",
+  "P 18.4525227782 20.5513855873 0 2 3\n",
+  "P 4.6934835299 5.3627481560 0 19 2\n",
+  "P 18.7019810019 15.1886374313 0 19 2\n",
+  "P 18.7065925350 11.7958832848 0 7 4\n",
+  "P 4.6888719968 8.7555023026 0 7 4\n",
+  "P 19.2998488114 2.1315039965 0 42 3\n",
+  "P 4.0956157204 18.4198815908 0 42 3\n"
+  ]
+    
+    
 -- EOF
