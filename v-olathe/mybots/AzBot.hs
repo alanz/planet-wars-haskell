@@ -37,6 +37,8 @@ Strategy
 - Sometimes get stuck in no-hope strategy, need to bring an element of
   randomness into the play. http://72.44.46.68/canvas?game_id=154010
 
+- For an enemy planet, make allowance for production according to time of flight
+
 -}
 {-
 TODO:
@@ -72,26 +74,27 @@ fAzBot planets fleets =
                           
   in 
      if 
-       -- trace(debugStr) True || -- Must comment out this line when playing the TCP server
+       --trace(debugStr) True || -- Must comment out this line when playing the TCP server
        null myPlanets || null notMyPlanets || null sc2_candidates -- || (not . null . drop maxFleetsM1 $ myFleets)
        then []
        else 
          --[newFleet source target (div (ships source) 2)]
-         map (\(_,(src,dst,_)) -> newFleet src dst ((ships dst) + 1)) sc2_candidates
+         map (\(_,(src,dst,(_,shipsDst))) -> newFleet src dst (shipsDst + 1)) sc2_candidates
 
 -- ---------------------------------------------------------------------
 
 targetsForSource src candidates = 
   let
     sc2_candidates' = sortBy rank 
+                      $ filter (\(_,_,(_,shipsDst)) -> shipsDst > 0)
                       $ map (\(dst,cntMine,cntEnemy) -> (src,dst,score2 src dst cntMine cntEnemy)) candidates
    
-    cumulativeShips = tail $ scanl (+) 0 $ map (\(src,dst,_) -> 1 + (ships dst)) sc2_candidates'
+    cumulativeShips = tail $ scanl (+) 0 $ map (\(_,_,(_,shipsDst)) -> 1 + shipsDst) sc2_candidates'
     
     sc2_candidates = takeWhile (\(c,_) -> c < (ships src) - 5) $ zip cumulativeShips sc2_candidates'
   
     
-    rank (_,_,a) (_,_,b) = compare b a -- descending order of score
+    rank (_,_,(a,_)) (_,_,(b,_)) = compare b a -- descending order of score
 
   in
    sc2_candidates
@@ -104,16 +107,16 @@ score p = fromIntegral (ships p)/(1 + fromIntegral (production p))
 -- ---------------------------------------------------------------------
 
 -- Higher score means a better/more pressing target
-score2 :: Planet -> Planet -> ShipCount -> ShipCount -> Double
+score2 :: Planet -> Planet -> ShipCount -> ShipCount -> (Double, ShipCount)
 score2 src dst cntMine cntEnemy 
-  | isMine dst  = scoreMine
-  | isEnemy dst = scoreEnemy                 
-  | otherwise   = scoreNeutral                  
+  | isMine dst  = (scoreMine, shipsDstMine)
+  | isEnemy dst = (scoreEnemy, shipsDstEnemy)
+  | otherwise   = (scoreNeutral, shipsDstNeutral)
   where
     shipsDstMine    = cntMine - cntEnemy + (ships dst)
     scoreMine = if (shipsDstMine > 5) then (0.0) else (scoreVal 1.0 (score dst))
     
-    shipsDstEnemy   = cntMine - cntEnemy - (ships dst)
+    shipsDstEnemy   = cntMine - cntEnemy - (ships dst) + (dist * (production dst))
     
     shipsDstNeutral = cntMine - cntEnemy + (ships dst) -- TODO : proper calc, largest - sndlargest, toss 3rd
     
@@ -163,4 +166,47 @@ updateMap m f =
 
 main = playAs fAzBot
 
+-- ---------------------------------------------------------------------
+
+test =
+  let
+    (planets,fleets) = head $ parseGameState $ concat mapStr                      
+  in
+   fAzBot planets fleets
+   
+mapStr = 
+  [
+  "P 11.152765 11.261845 0 119 1\n",
+  "P 19.323053 19.415083 1 45 5\n",
+  "P 2.982476 3.108607 2 58 5\n",
+  "P 17.544563 22.212924 0 45 1\n",
+  "P 4.760966 0.310766 0 45 1\n",
+  "P 10.084655 4.773044 2 8 5\n",
+  "P 12.220874 17.750646 1 1 5\n",
+  "P 21.406539 17.735427 0 86 1\n",
+  "P 0.898990 4.788263 0 86 1\n",
+  "P 0.000000 2.053054 0 59 1\n",
+  "P 22.305529 20.470636 0 59 1\n",
+  "P 3.808495 5.491990 0 69 5\n",
+  "P 18.497034 17.031701 1 38 5\n",
+  "P 8.841685 12.712220 0 57 4\n",
+  "P 13.463845 9.811470 0 57 4\n",
+  "P 13.635701 7.877295 0 17 5\n",
+  "P 8.669829 14.646395 0 17 5\n",
+  "P 6.688247 18.076397 0 66 5\n",
+  "P 15.617282 4.447293 0 66 5\n",
+  "P 16.918396 0.696320 0 70 5\n",
+  "P 5.387133 21.827370 0 70 5\n",
+  "P 13.198469 0.000000 0 79 2\n",
+  "P 9.107060 22.523690 0 79 2\n",
+  "F 2 22 2 15 12 3\n",
+  "F 2 1 2 20 19 11\n",
+  "F 2 18 2 16 13 5\n",
+  "F 2 3 2 16 13 6\n",
+  "F 2 4 2 16 13 7\n",
+  "F 2 1 2 5 8 3\n",
+  "F 2 4 2 16 13 9\n",
+  "F 2 4 2 16 13 10\n"
+  ]
+  
 -- EOF
