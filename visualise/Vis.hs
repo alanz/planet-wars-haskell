@@ -1,22 +1,47 @@
 -- | Generate some visualisations of map state
 
-module Main where
+module Vis (
+  renderDiag
+  , makeDiag
+  ) where
 
 import qualified Graphics.Rendering.Diagrams as D
 import PlanetWars
 import StringLike
-import Vis
 
+renderDiag diag = D.renderAs D.PNG "vis.png" (D.Width 400) diag
 
 -- ---------------------------------------------------------------------
 
 fVisBot =
   let 
-    (planets,fleets) = head $ parseGameState $ concat mapStr2                      
+    (planets,fleets) = head $ parseGameState $ concat mapStr                      
+    --diag = vis
     diag = makeDiag planets fleets
   in 
     --show (planets,fleets)
     renderDiag diag
+
+makeDiag planets fleets = D.position $ map (\p -> (posToPoint (position p),render_planet p)) planets
+
+posToPoint (Position x y) = (x,-y)
+
+pidToNum (PlanetID i) = i
+
+render_planet planet =
+  D.union [
+    D.lc (planetColour planet) $ D.circle (0.5 + 0.3*(fromIntegral (production planet)))
+    , D.vcat [D.text 0.6 (show $ fromIntegral (ships planet))
+             , D.hcat [D.text 0.6 (show $ pidToNum (planetID planet))
+                      , D.text 0.6 (show $ fromIntegral (production planet))
+                      ]
+             ]
+    ]  
+  where
+    planetColour p
+      | isNeutral p = D.grey
+      | isMine    p = D.blue
+      | isEnemy   p = D.red
   
 -- ---------------------------------------------------------------------
 
@@ -50,40 +75,5 @@ mapStr = [
    "P 14.9096785797 9.90312911175 0 89 2\n",
    "go\n"
    ]
-
-mapStr2 = 
-  [
-  "P 11.152765 11.261845 0 119 1\n",
-  "P 19.323053 19.415083 1 45 5\n",
-  "P 2.982476 3.108607 2 58 5\n",
-  "P 17.544563 22.212924 0 45 1\n",
-  "P 4.760966 0.310766 0 45 1\n",
-  "P 10.084655 4.773044 2 8 5\n",
-  "P 12.220874 17.750646 1 1 5\n",
-  "P 21.406539 17.735427 0 86 1\n",
-  "P 0.898990 4.788263 0 86 1\n",
-  "P 0.000000 2.053054 0 59 1\n",
-  "P 22.305529 20.470636 0 59 1\n",
-  "P 3.808495 5.491990 0 69 5\n",
-  "P 18.497034 17.031701 1 38 5\n",
-  "P 8.841685 12.712220 0 57 4\n",
-  "P 13.463845 9.811470 0 57 4\n",
-  "P 13.635701 7.877295 0 17 5\n",
-  "P 8.669829 14.646395 0 17 5\n",
-  "P 6.688247 18.076397 0 66 5\n",
-  "P 15.617282 4.447293 0 66 5\n",
-  "P 16.918396 0.696320 0 70 5\n",
-  "P 5.387133 21.827370 0 70 5\n",
-  "P 13.198469 0.000000 0 79 2\n",
-  "P 9.107060 22.523690 0 79 2\n",
-  "F 2 22 2 15 12 3\n",
-  "F 2 1 2 20 19 11\n",
-  "F 2 18 2 16 13 5\n",
-  "F 2 3 2 16 13 6\n",
-  "F 2 4 2 16 13 7\n",
-  "F 2 1 2 5 8 3\n",
-  "F 2 4 2 16 13 9\n",
-  "F 2 4 2 16 13 10\n"
-  ]
 
 -- EOF

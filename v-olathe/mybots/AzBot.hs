@@ -80,7 +80,7 @@ fAzBot planets fleets =
                           
   in 
      if 
-       --trace(debugStr) True || -- Must comment out this line when playing the TCP server
+       -- trace(debugStr) False || -- Must comment out this line when playing the TCP server
        null myPlanets || null notMyPlanets || null sc2_candidates -- || (not . null . drop maxFleetsM1 $ myFleets)
        then []
        else 
@@ -112,6 +112,7 @@ targetsForSource fp src candidates =
     rank (_,_,(a,_)) (_,_,(b,_)) = compare b a -- descending order of score
 
   in
+   trace(debugStr)
    sc2_candidates
 
 -- ---------------------------------------------------------------------
@@ -182,12 +183,14 @@ updateMap m f =
 main = playAs fAzBot
 
 -- ---------------------------------------------------------------------
+-- ---------------------------------------------------------------------
+
 
 test =
   let
-    (planets,fleets) = head $ parseGameState $ concat map449
+    (planets,fleets) = head $ parseGameState $ concat mapStr
   in
-   fAzBot planets fleets
+    serializeGameTurn $ fAzBot planets fleets
    
 mapStr = 
   [

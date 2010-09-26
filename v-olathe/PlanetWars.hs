@@ -22,6 +22,7 @@ module PlanetWars ( Player(Neutral, Me, Enemy), isMine, isNotMine, isNeutral, is
                   , playAs, playAs'
                   -- For other purposes                            
                   , parseGameState                            
+                  , serializeGameTurn
                   , Position(..), position
                   , PlanetID(..)                
                     
