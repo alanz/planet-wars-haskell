@@ -4,7 +4,7 @@
 
 import PlanetWars
 import Data.Ord       (comparing)
-import Data.List      (partition, minimumBy, maximumBy,sortBy,foldl')
+import Data.List      (partition, minimumBy, maximumBy,sortBy,foldl',sort)
 import Control.Monad  (forever, when, unless)
 import Debug.Trace
 import qualified Data.Map as Map
@@ -71,16 +71,17 @@ fAzBot planets fleets =
                               
     fp = futurePlanets planets fleets                 
                  
-    candidates = Map.elems fp
+    candidates = fp
                  
-    sc2_candidates = concatMap (\src -> targetsForSource fp src candidates) myPlanets
+    sc2_candidates = concatMap (\src -> targetsForSource src candidates) myPlanets
     
     --debugStr = show(target)
-    debugStr = ("#" ++ show(sc2_candidates) ++ "\n" ++ show(fp))
+    --debugStr = ("#" ++ show(sc2_candidates) ++ "\n" ++ show(fp))
+    debugStr = ("#" ++ show(fp))
                           
   in 
      if 
-       -- trace(debugStr) False || -- Must comment out this line when playing the TCP server
+       --trace(debugStr) False || -- Must comment out this line when playing the TCP server
        null myPlanets || null notMyPlanets || null sc2_candidates -- || (not . null . drop maxFleetsM1 $ myFleets)
        then []
        else 
@@ -89,9 +90,9 @@ fAzBot planets fleets =
 
 -- ---------------------------------------------------------------------
 
-targetsForSource fp src candidates = 
+targetsForSource src candidates = 
   let
-    fp_candidates = map (\(dst,cntMine,cntEnemy) -> (src,dst,score2 src dst cntMine cntEnemy)) candidates
+    fp_candidates = map (\(dst,(owner,cnt)) -> (src,dst,score2 src dst owner cnt)) candidates
     
     sc2_candidates' = sortBy rank 
                       $ filter (\(_,_,(_,shipsDst)) -> shipsDst > 0)
@@ -106,32 +107,33 @@ targetsForSource fp src candidates =
     
     --debugStr = "srcShips="++show(srcShips)
     debugStr = "fp_candidates="++show(fp_candidates)
-    sc2_candidates = {-trace(debugStr) -} takeWhile (\(c,_) -> c < srcShips' - 5) $ zip cumulativeShips sc2_candidates'
+    sc2_candidates = takeWhile (\(c,_) -> c < srcShips' - 5) 
+                     $ zip cumulativeShips sc2_candidates'
   
     
     rank (_,_,(a,_)) (_,_,(b,_)) = compare b a -- descending order of score
 
   in
-   trace(debugStr)
+   -- trace(debugStr)
    sc2_candidates
 
 -- ---------------------------------------------------------------------
 
 -- Higher score means a better/more pressing target
-score2 :: Planet -> Planet -> ShipCount -> ShipCount -> (Double, ShipCount)
-score2 src dst cntMine cntEnemy 
-  | isMine dst  = (scoreMine, shipsDstMine)
-  | isEnemy dst = (scoreEnemy, shipsDstEnemy)
-  | otherwise   = (scoreNeutral, shipsDstNeutral)
+score2 :: Planet -> Planet -> Player -> ShipCount -> (Double, ShipCount)
+score2 src dst owner cnt
+  | owner == Me    = (scoreMine,    cntFuture)
+  | owner == Enemy = (scoreEnemy,   cntFuture)
+  | otherwise      = (scoreNeutral, cnt)
   where
-    shipsDstMine    = cntMine - cntEnemy + (ships dst)
-    scoreMine = if (shipsDstMine > 5) then (0.0) else (scoreVal 1.0 (score shipsDstMine dst))
-    
-    shipsDstEnemy   = cntMine - cntEnemy - (ships dst) - ((dist+1) * (production dst))
-    
-    shipsDstNeutral = cntMine - cntEnemy + (ships dst) -- TODO : proper calc, largest - sndlargest, toss 3rd
-    
     dist = fromIntegral (distance src dst)
+    cntFuture = cnt + (dist * (production dst))
+    
+    scoreMine    = if (cnt > 5) then (0.0) else (scoreVal 1.0 (score cntFuture dst))
+    scoreEnemy   = scoreVal (pSuccess cntFuture) (score cntFuture dst)
+    scoreNeutral = scoreVal (pSuccess cnt)       (score cnt dst)
+
+    -- Utility stuff
     pSuccess shipsDst = 
       if (ships src > shipsDst) 
         then (1.0) 
@@ -144,19 +146,49 @@ score2 src dst cntMine cntEnemy
     score :: ShipCount -> Planet -> Double
     score sc p = fromIntegral (sc) / (1 + (fromIntegral (production p)**1.5))
 
-    scoreEnemy   = scoreVal (pSuccess shipsDstEnemy)   (score shipsDstEnemy dst)
-    scoreNeutral = scoreVal (pSuccess shipsDstNeutral) (score shipsDstNeutral dst)
   
 -- ---------------------------------------------------------------------
 
-futurePlanets :: [Planet] -> [Fleet] -> Map.Map Planet (Planet, ShipCount, ShipCount)
+futurePlanets :: [Planet] -> [Fleet] -> {-Map.Map Planet-} [(Planet, (Player, ShipCount))]
 futurePlanets planets fleets =
   let
     start = foldl' (\m p -> Map.insert (p) (p,0,0) m) Map.empty planets
     
+    res :: Map.Map Planet (Planet, ShipCount, ShipCount)
     res = foldl' (\m f -> updateMap m f) start fleets
+    
   in
-    res
+    --trace("futurePlanets:res=" ++ show(Map.elems res))
+    map (\(p,m,e) -> (p,calcFuturePlanet p m e)) $ Map.elems res
+
+calcFuturePlanet dst cntMine cntEnemy
+ | isMine dst  = resMine
+ | isEnemy dst = resEnemy
+ | otherwise   = resNeutral
+ where               
+    shipsDstMine    = cntMine - cntEnemy + (ships dst)
+    resMine = if (shipsDstMine < 0) then (Enemy, - shipsDstMine) else (Me, shipsDstMine)
+    
+    shipsDstEnemy   = cntMine - cntEnemy - (ships dst)
+    resEnemy = if (shipsDstEnemy < 0) then (Enemy, - shipsDstEnemy) else (Me, shipsDstEnemy)
+    
+    resNeutral = calcNeutral (ships dst) cntMine cntEnemy
+    
+calcNeutral :: ShipCount -> ShipCount -> ShipCount -> (Player,ShipCount)    
+calcNeutral neutral mine enemy = 
+  let
+    vals = [neutral,mine,enemy]
+    minVal = minimum vals
+    resVals = map (\x -> x - minVal) vals
+    lastTwo = tail $ sort $ zip resVals [Neutral,Me,Enemy]
+    (weakCnt,_) = head lastTwo
+    (strongCnt,winner) = last lastTwo 
+  in  
+   (winner, strongCnt - weakCnt)
+   
+-- ---------------------------------------------------------------------    
+    
+swap (x, y) = (y, x)    
 
 -- ---------------------------------------------------------------------
 {-
