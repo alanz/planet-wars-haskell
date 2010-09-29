@@ -14,3 +14,5 @@ dist/
 /run-tcp.sh~
 /tools/tcp
 /visualise/Main.hs~
+/submit.tgz
+/visualise/Vis.hs~

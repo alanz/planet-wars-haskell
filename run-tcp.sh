@@ -10,8 +10,8 @@ export MY_BOT="./dist/build/AzBot/AzBot"
 . $CFG
 #echo $PASSWORD
 
-#export DEBUG=-d
-export DEBUG=
+export DEBUG=-d
+#export DEBUG=
 
 #./tools/tcp 72.44.46.68 995 alan_zimm -p $PASSWORD $MY_BOT
 java -jar tools/TCP.jar $DEBUG 72.44.46.68 995  alan_zimm -p $PASSWORD $MY_BOT

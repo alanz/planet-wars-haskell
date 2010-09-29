@@ -71,13 +71,12 @@ fAzBot planets fleets =
                               
     fp = futurePlanets planets fleets                 
                  
-    candidates = fp
-                 
-    sc2_candidates = concatMap (\src -> targetsForSource src candidates) myPlanets
+    sc2_candidates = concatMap (\src -> targetsForSource src fp) myPlanets
     
     --debugStr = show(target)
     --debugStr = ("#" ++ show(sc2_candidates) ++ "\n" ++ show(fp))
-    debugStr = ("#" ++ show(fp))
+    debugStr = ("#" ++ show(sc2_candidates))
+    --debugStr = ("#" ++ show(fp))
                           
   in 
      if 
@@ -86,48 +85,69 @@ fAzBot planets fleets =
        then []
        else 
          --[newFleet source target (div (ships source) 2)]
-         map (\(_,(src,dst,(_,shipsDst))) -> newFleet src dst (shipsDst + 1)) sc2_candidates
+         map (\(_,(src,dst,(_,shipsDst,_))) -> newFleet src dst (shipsDst + 1)) sc2_candidates
 
 -- ---------------------------------------------------------------------
 
-targetsForSource src candidates = 
+targetsForSource
+  :: Planet
+     -> [(Planet, (Player, ShipCount))]
+     -> [(ShipCount, (Planet, Planet, (Double, ShipCount,Int)))]
+targetsForSource src fp = 
   let
-    fp_candidates = map (\(dst,(owner,cnt)) -> (src,dst,score2 src dst owner cnt)) candidates
+    fp_candidates = map (\(dst,(owner,cnt)) -> (src,dst,score2 src dst owner cnt)) fp
     
     sc2_candidates' = sortBy rank 
-                      $ filter (\(_,_,(_,shipsDst)) -> shipsDst > 0)
+                      $ filter (\(_,_,(_,shipsDst,_)) -> shipsDst < srcAvail)  
                       $ fp_candidates
    
-    cumulativeShips = tail $ scanl (+) 0 $ map (\(_,_,(_,shipsDst)) -> 1 + shipsDst) sc2_candidates'
+    cumulativeShips = tail $ scanl (+) 0 $ map (\(_,_,(_,shipsDst,_)) -> 1 + shipsDst) sc2_candidates'
     
     -- TODO: Must be a more effective way
-    (_,_,(_,srcShips)) = head $ filter (\(_,d,_) -> src == d) fp_candidates
+    (_,_,(_,srcShips,_)) = head $ filter (\(_,d,_) -> src == d) fp_candidates
     
     srcShips' = min srcShips (ships src)
     
+    srcReserve = max 5 ((production src) * 2)
+    srcAvail = srcShips' - srcReserve
+    
     --debugStr = "srcShips="++show(srcShips)
-    debugStr = "fp_candidates="++show(fp_candidates)
-    sc2_candidates = takeWhile (\(c,_) -> c < srcShips' - 5) 
+    --debugStr = "targetsForSource:fp=" ++ (show_fp fp)
+    debugStr = "fp_candidates="++(show_fp_candidates fp_candidates)
+    --debugStr = "sc2_candidates'="++show(sc2_candidates')++"srcAvail=" ++ show(srcAvail)
+    sc2_candidates = takeWhile (\(c,_) -> c < srcAvail) 
                      $ zip cumulativeShips sc2_candidates'
   
     
-    rank (_,_,(a,_)) (_,_,(b,_)) = compare b a -- descending order of score
+    rank (_,_,(a,_,_)) (_,_,(b,_,_)) = compare b a -- descending order of score
 
   in
-   -- trace(debugStr)
+   trace(debugStr)
    sc2_candidates
+
+show_fp :: [(Planet, (Player, ShipCount))] -> [Char]
+show_fp fp = concatMap (\(src,(owner,cnt)) -> "(" ++ show (planetID src) ++ "," ++ show((owner,cnt)) ++ ")") fp
+
+show_fp_candidates :: [(Planet,Planet,(Double,ShipCount,Int))] -> [Char]
+show_fp_candidates xs = concatMap (\(src,dst,(score,cnt,dist)) -> "(" ++ show(planetID src) ++ "," ++ show(planetID dst) ++ "," ++ show((truncate(score*1000000),cnt,dist)) ++ ")") xs
 
 -- ---------------------------------------------------------------------
 
 -- Higher score means a better/more pressing target
-score2 :: Planet -> Planet -> Player -> ShipCount -> (Double, ShipCount)
+score2 :: Planet -> Planet -> Player -> ShipCount -> (Double,ShipCount,Int)
 score2 src dst owner cnt
-  | owner == Me    = (scoreMine,    cntFuture)
-  | owner == Enemy = (scoreEnemy,   cntFuture)
-  | otherwise      = (scoreNeutral, cnt)
+  | owner == Me    = (scoreMine,    cntFuture+1,dist')
+  | owner == Enemy = (scoreEnemy,   cntFuture+1,dist')
+  | otherwise      = (scoreNeutral, cnt+1,      dist')
   where
+    
     dist = fromIntegral (distance src dst)
-    cntFuture = cnt + (dist * (production dst))
+    dist' :: Int
+    dist' = fromIntegral dist
+    
+    --cntFuture = cnt + (dist * (production dst))
+    --cntFuture = cnt -- Can launch more fleets next time (what about production mismatch?)
+    cntFuture = cnt + ((3*(dist * (production dst))) `div` 3)
     
     scoreMine    = if (cnt > 5) then (0.0) else (scoreVal 1.0 (score cntFuture dst))
     scoreEnemy   = scoreVal (pSuccess cntFuture) (score cntFuture dst)
@@ -220,7 +240,7 @@ main = playAs fAzBot
 
 test =
   let
-    (planets,fleets) = head $ parseGameState $ concat mapStr
+    (planets,fleets) = head $ parseGameState $ concat mapWhiteside
   in
     serializeGameTurn $ fAzBot planets fleets
    
@@ -286,5 +306,35 @@ map449 =
   "P 4.0956157204 18.4198815908 0 42 3\n"
   ]
     
+mapWhiteside = [
+   "P 11.579376 11.554042 0 150 0\n",
+   "P 11.667471 12.485644 2 11 5\n",
+   "P 11.491280 10.622441 1 8 5\n",
+   "P 6.467471 8.738467 0 56 4\n",
+   "P 16.691280 14.369617 0 56 4\n",
+   "P 2.343490 10.691485 1 1 3\n",
+   "P 20.815261 12.416600 1 1 3\n",
+   "P 17.773524 18.239086 0 15 2\n",
+   "P 5.385228 4.868999 0 15 2\n",
+   "P 2.868881 2.143556 0 90 2\n",
+   "P 20.289870 20.964529 0 90 2\n",
+   "P 18.674578 4.825621 0 60 2\n",
+   "P 4.484174 18.282463 0 60 2\n",
+   "P 8.853196 10.925516 1 31 5\n",
+   "P 14.305555 12.182568 2 10 5\n",
+   "P 16.899850 23.108085 0 76 5\n",
+   "P 6.258901 0.000000 0 76 5\n",
+   "P 7.054547 3.960942 0 67 3\n",
+   "P 16.104204 19.147143 0 67 3\n",
+   "P 0.000000 19.094381 0 57 4\n",
+   "P 23.158751 4.013704 0 57 4\n",
+   "P 13.804757 17.287464 0 82 5\n",
+   "P 9.353994 5.820621 0 82 5\n",
+   "F 2 5 14 2 4 1\n",
+   "F 2 5 14 2 4 2\n",
+   "F 2 5 1 2 2 1\n",
+   "F 2 5 14 2 4 3\n"
+   ]
+  
     
 -- EOF
