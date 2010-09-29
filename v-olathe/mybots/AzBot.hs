@@ -50,6 +50,10 @@ Strategy
 - Modify the strategy when production is lower than enemy prod to make more production
 
 - Seem to have an off by one error in attacking enemy planets, due to production
+
+- Do not send to own planet unless it is actually in danger.
+
+- If a planet has inbound fleets, do not launch from it if you will then lose the planet.
 -}
 {-
 TODO:
@@ -85,31 +89,32 @@ fAzBot planets fleets =
        then []
        else 
          --[newFleet source target (div (ships source) 2)]
-         map (\(_,(src,dst,(_,shipsDst,_))) -> newFleet src dst (shipsDst + 1)) sc2_candidates
+         map (\(_,(src,dst,_,(_,shipsDst,_))) -> newFleet src dst (shipsDst + 1)) sc2_candidates
 
 -- ---------------------------------------------------------------------
 
 targetsForSource
   :: Planet
      -> [(Planet, (Player, ShipCount))]
-     -> [(ShipCount, (Planet, Planet, (Double, ShipCount,Int)))]
+     -> [(ShipCount, (Planet, Planet, Player, (Double, ShipCount,Int)))]
 targetsForSource src fp = 
   let
-    fp_candidates = map (\(dst,(owner,cnt)) -> (src,dst,score2 src dst owner cnt)) fp
+    fp_candidates = map (\(dst,(owner,cnt)) -> (src,dst,owner,score2 src dst owner cnt)) fp
     
     sc2_candidates' = sortBy rank 
-                      $ filter (\(_,_,(_,shipsDst,_)) -> shipsDst < srcAvail)  
+                      $ filter (\(_,_,_,(score,shipsDst,_)) -> score > 0.0 && shipsDst < srcAvail)  
                       $ fp_candidates
    
-    cumulativeShips = tail $ scanl (+) 0 $ map (\(_,_,(_,shipsDst,_)) -> 1 + shipsDst) sc2_candidates'
+    cumulativeShips = tail $ scanl (+) 0 $ map (\(_,_,_,(_,shipsDst,_)) -> 1 + shipsDst) sc2_candidates'
     
     -- TODO: Must be a more effective way
-    (_,_,(_,srcShips,_)) = head $ filter (\(_,d,_) -> src == d) fp_candidates
+    (_,_,futureOwner,(_,srcShips,_)) = head $ filter (\(_,d,_,_) -> src == d) fp_candidates
     
     srcShips' = min srcShips (ships src)
     
     srcReserve = max 5 ((production src) * 2)
-    srcAvail = srcShips' - srcReserve
+    srcAvail = if (futureOwner == Me) then (srcShips' - srcReserve) else (0) -- TODO: possibly flee with all available?
+
     
     --debugStr = "srcShips="++show(srcShips)
     --debugStr = "targetsForSource:fp=" ++ (show_fp fp)
@@ -119,26 +124,26 @@ targetsForSource src fp =
                      $ zip cumulativeShips sc2_candidates'
   
     
-    rank (_,_,(a,_,_)) (_,_,(b,_,_)) = compare b a -- descending order of score
+    rank (_,_,_,(a,_,_)) (_,_,_,(b,_,_)) = compare b a -- descending order of score
 
   in
-   trace(debugStr)
+   --trace(debugStr)
    sc2_candidates
 
 show_fp :: [(Planet, (Player, ShipCount))] -> [Char]
 show_fp fp = concatMap (\(src,(owner,cnt)) -> "(" ++ show (planetID src) ++ "," ++ show((owner,cnt)) ++ ")") fp
 
-show_fp_candidates :: [(Planet,Planet,(Double,ShipCount,Int))] -> [Char]
-show_fp_candidates xs = concatMap (\(src,dst,(score,cnt,dist)) -> "(" ++ show(planetID src) ++ "," ++ show(planetID dst) ++ "," ++ show((truncate(score*1000000),cnt,dist)) ++ ")") xs
+show_fp_candidates :: [(Planet,Planet,Player,(Double,ShipCount,Int))] -> [Char]
+show_fp_candidates xs = concatMap (\(src,dst,fo,(score,cnt,dist)) -> "(" ++ show(planetID src) ++ "," ++ show(planetID dst) ++ "," ++ "," ++ show(fo) ++ "," ++ show((truncate(score*1000000),cnt,dist)) ++ ")") xs
 
 -- ---------------------------------------------------------------------
 
 -- Higher score means a better/more pressing target
 score2 :: Planet -> Planet -> Player -> ShipCount -> (Double,ShipCount,Int)
 score2 src dst owner cnt
-  | owner == Me    = (scoreMine,    cntFuture+1,dist')
-  | owner == Enemy = (scoreEnemy,   cntFuture+1,dist')
-  | otherwise      = (scoreNeutral, cnt+1,      dist')
+  | owner == Me    = (scoreMine*   1.0, cntFuture+1,dist')
+  | owner == Enemy = (scoreEnemy*  1.2, cntFuture+1,dist')
+  | otherwise      = (scoreNeutral*1.2, cnt+1,      dist')
   where
     
     dist = fromIntegral (distance src dst)
@@ -149,6 +154,7 @@ score2 src dst owner cnt
     --cntFuture = cnt -- Can launch more fleets next time (what about production mismatch?)
     cntFuture = cnt + ((3*(dist * (production dst))) `div` 3)
     
+    -- Higher is more desirable target, runs from 0 up
     scoreMine    = if (cnt > 5) then (0.0) else (scoreVal 1.0 (score cntFuture dst))
     scoreEnemy   = scoreVal (pSuccess cntFuture) (score cntFuture dst)
     scoreNeutral = scoreVal (pSuccess cnt)       (score cnt dst)
@@ -160,7 +166,8 @@ score2 src dst owner cnt
         else (1.0 * ( (fromIntegral (ships src - 5)) / (fromIntegral (shipsDst))))
 
     --scoreVal ps s = (ps / s) / (1.5^(dist))
-    scoreVal ps s = (ps / s) / (1.1^(dist))
+    scoreVal ps s = (ps / s) / (1.3^(dist))
+    --scoreVal ps s = (ps / s) / (1.1^(dist))
 
     -- Lower score is better. Need to flip that some time
     score :: ShipCount -> Planet -> Double
