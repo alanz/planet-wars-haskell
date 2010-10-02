@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -O2 -fexcess-precision -fvia-C -optc-O3 #-}
 
--- Based on MyBot from Olafe, as a skeleton
+-- Based on MyBot from Olathe, as a skeleton
 
 import PlanetWars
 import Data.Ord       (comparing)
@@ -54,6 +54,10 @@ Strategy
 - Do not send to own planet unless it is actually in danger.
 
 - If a planet has inbound fleets, do not launch from it if you will then lose the planet.
+
+- Look at timing of enemy arrivals at a neutral planet, else my fleets
+  knock out neutrals instead of securing planet
+
 -}
 {-
 TODO:
@@ -75,7 +79,13 @@ fAzBot planets fleets =
                               
     fp = futurePlanets planets fleets                 
                  
-    sc2_candidates = concatMap (\src -> targetsForSource src fp) myPlanets
+    (fp',sc2_candidates') = foldl' (\(fpacc,tgtsacc) src -> accTargetsForSource src fpacc tgtsacc) (fp,[]) myPlanets
+    
+    sc2_candidates = sc2_candidates'
+    --sc2_candidates = concatMap (\src -> targetsForSource src fp) myPlanets
+    
+
+    -- -------------------------------
     
     --debugStr = show(target)
     --debugStr = ("#" ++ show(sc2_candidates) ++ "\n" ++ show(fp))
@@ -89,14 +99,28 @@ fAzBot planets fleets =
        then []
        else 
          --[newFleet source target (div (ships source) 2)]
-         map (\(_,(src,dst,_,(_,shipsDst,_))) -> newFleet src dst (shipsDst + 1)) sc2_candidates
+         map (\(_,(src,dst,_,(_,shipsDst,_))) -> newFleet src dst shipsDst) sc2_candidates
+
+-- ---------------------------------------------------------------------
+
+accTargetsForSource 
+  :: Planet
+     -> [(Planet, (Player, ShipCount))]
+     -> [(ShipCount, (Planet, Planet, Player, (Double,ShipCount,Int)))]
+     -> ([(Planet, (Player, ShipCount))],[(ShipCount, (Planet, Planet, Player, (Double,ShipCount,Int)))])
+accTargetsForSource src fp targets = 
+  let
+    targets' = targetsForSource src fp
+    fp' = updateFuturePlanets fp targets'
+  in
+    (fp', targets' ++ targets)
 
 -- ---------------------------------------------------------------------
 
 targetsForSource
   :: Planet
      -> [(Planet, (Player, ShipCount))]
-     -> [(ShipCount, (Planet, Planet, Player, (Double, ShipCount,Int)))]
+     -> [(ShipCount, (Planet, Planet, Player, (Double,ShipCount,Int)))]
 targetsForSource src fp = 
   let
     fp_candidates = map (\(dst,(owner,cnt)) -> (src,dst,owner,score2 src dst owner cnt)) fp
@@ -112,14 +136,16 @@ targetsForSource src fp =
     
     srcShips' = min srcShips (ships src)
     
-    srcReserve = max 5 ((production src) * 2)
+    --srcReserve = max 5 ((production src) * 2)
+    srcReserve = 5
     srcAvail = if (futureOwner == Me) then (srcShips' - srcReserve) else (0) -- TODO: possibly flee with all available?
 
     
     --debugStr = "srcShips="++show(srcShips)
-    --debugStr = "targetsForSource:fp=" ++ (show_fp fp)
-    debugStr = "fp_candidates="++(show_fp_candidates fp_candidates)
-    --debugStr = "sc2_candidates'="++show(sc2_candidates')++"srcAvail=" ++ show(srcAvail)
+    debugStr = "targetsForSource:fp=" ++ (show_fp fp)
+    --debugStr = "fp_candidates="++(show_fp_candidates fp_candidates) ++ "srcShips=" ++ show(srcShips)
+    --debugStr = "sc2_candidates'="++(show_fp_candidates sc2_candidates')
+
     sc2_candidates = takeWhile (\(c,_) -> c < srcAvail) 
                      $ zip cumulativeShips sc2_candidates'
   
@@ -141,7 +167,7 @@ show_fp_candidates xs = concatMap (\(src,dst,fo,(score,cnt,dist)) -> "(" ++ show
 -- Higher score means a better/more pressing target
 score2 :: Planet -> Planet -> Player -> ShipCount -> (Double,ShipCount,Int)
 score2 src dst owner cnt
-  | owner == Me    = (scoreMine*   1.0, cntFuture+1,dist')
+  | owner == Me    = (scoreMine*   1.0, cnt,        dist')
   | owner == Enemy = (scoreEnemy*  1.2, cntFuture+1,dist')
   | otherwise      = (scoreNeutral*1.2, cnt+1,      dist')
   where
@@ -152,10 +178,11 @@ score2 src dst owner cnt
     
     --cntFuture = cnt + (dist * (production dst))
     --cntFuture = cnt -- Can launch more fleets next time (what about production mismatch?)
-    cntFuture = cnt + ((3*(dist * (production dst))) `div` 3)
+    cntFuture = cnt + ((1*(dist * (production dst))) `div` 4)
     
     -- Higher is more desirable target, runs from 0 up
-    scoreMine    = if (cnt > 5) then (0.0) else (scoreVal 1.0 (score cntFuture dst))
+    --scoreMine    = if (cnt > 5) then (0.0) else  ((scoreVal 1.0 (score cntFuture dst)))
+    scoreMine    = 0.0
     scoreEnemy   = scoreVal (pSuccess cntFuture) (score cntFuture dst)
     scoreNeutral = scoreVal (pSuccess cnt)       (score cnt dst)
 
@@ -188,12 +215,17 @@ futurePlanets planets fleets =
     --trace("futurePlanets:res=" ++ show(Map.elems res))
     map (\(p,m,e) -> (p,calcFuturePlanet p m e)) $ Map.elems res
 
+-- ---------------------------------------------------------------------
+
+calcFuturePlanet
+  :: (HasOwner a, HasShips a) =>
+     a -> ShipCount -> ShipCount -> (Player, ShipCount)
 calcFuturePlanet dst cntMine cntEnemy
  | isMine dst  = resMine
  | isEnemy dst = resEnemy
  | otherwise   = resNeutral
  where               
-    shipsDstMine    = cntMine - cntEnemy + (ships dst)
+    shipsDstMine = cntMine - cntEnemy + (ships dst)
     resMine = if (shipsDstMine < 0) then (Enemy, - shipsDstMine) else (Me, shipsDstMine)
     
     shipsDstEnemy   = cntMine - cntEnemy - (ships dst)
@@ -201,6 +233,8 @@ calcFuturePlanet dst cntMine cntEnemy
     
     resNeutral = calcNeutral (ships dst) cntMine cntEnemy
     
+-- ---------------------------------------------------------------------    
+
 calcNeutral :: ShipCount -> ShipCount -> ShipCount -> (Player,ShipCount)    
 calcNeutral neutral mine enemy = 
   let
@@ -212,6 +246,58 @@ calcNeutral neutral mine enemy =
     (strongCnt,winner) = last lastTwo 
   in  
    (winner, strongCnt - weakCnt)
+   
+-- ---------------------------------------------------------------------    
+
+updateFuturePlanets
+  :: [(Planet, (Player, ShipCount))] -- fp
+  -> [(ShipCount, (Planet, Planet, Player, (Double,ShipCount,Int)))] -- targets
+  -> [(Planet, (Player, ShipCount))]  -- fp'
+updateFuturePlanets fp targets 
+  | targets == [] = fp
+  | otherwise     = fp'
+  where
+    
+    effect :: Map.Map Planet ShipCount
+    effect = foldl' (\m (_,(src,dst,_,(_,cntMine,_))) -> updateEffect m src dst cntMine) Map.empty targets
+    
+    fpm = foldl' (\fm (p,cnt) -> updateFpm fm p cnt) (Map.fromList fp) $ Map.assocs effect
+    
+    updateFpm m planet cnt 
+      | owner == Me    = Map.insert planet resMine    m
+      | owner == Enemy = Map.insert planet resEnemy   m
+      | otherwise      = Map.insert planet resNeutral m
+      where               
+         (owner,currentCnt) = m Map.! planet
+         
+         shipsDstMine = currentCnt + cnt
+         resMine = if (shipsDstMine < 0) then (Enemy, - shipsDstMine) else (Me, shipsDstMine)
+    
+         shipsDstEnemy   = currentCnt - cnt
+         resEnemy = if (shipsDstEnemy < 0) then (Enemy, - shipsDstEnemy) else (Me, shipsDstEnemy)
+    
+         resNeutral = calcNeutral currentCnt cnt 0
+
+
+    -- res = foldl' (\m f -> updateFp m f) effect targets
+
+    fp' = 
+      --trace ("updateFuturePlanets:effect=" ++ show(effect))
+      --trace ("updateFuturePlanets:fpm=" ++ show(Map.assocs fpm))
+      Map.assocs fpm
+    
+-- ---------------------------------------------------------------------    
+
+updateEffect m src dst cntMine =
+  let
+    m' = updateOne m src (-cntMine)
+    m'' = updateOne m' dst cntMine
+    
+    updateOne m p cnt
+      | Map.member p m = Map.insert p (cnt + (m Map.! p)) m
+      | otherwise      = Map.insert p (cnt              ) m
+  in 
+   m''
    
 -- ---------------------------------------------------------------------    
     
@@ -247,7 +333,7 @@ main = playAs fAzBot
 
 test =
   let
-    (planets,fleets) = head $ parseGameState $ concat mapWhiteside
+    (planets,fleets) = head $ parseGameState $ concat mapStr
   in
     serializeGameTurn $ fAzBot planets fleets
    
@@ -343,5 +429,92 @@ mapWhiteside = [
    "F 2 5 14 2 4 3\n"
    ]
   
+map273440 =
+  [
+  "P 11.015864 11.795797 0 140 1\n",
+  "P 3.478234 22.162737 1 42 5\n",
+  "P 18.553495 1.428856 2 15 5\n",
+  "P 14.408651 0.000000 0 26 3\n",
+  "P 7.623077 23.591593 0 26 3\n",
+  "P 13.165319 6.853138 0 39 2\n",
+  "P 8.866410 16.738455 0 39 2\n",
+  "P 12.019278 5.208630 0 17 4\n",
+  "P 10.012450 18.382963 0 17 4\n",
+  "P 13.449553 16.621267 0 25 5\n",
+  "P 8.582176 6.970326 0 25 5\n",
+  "P 2.377923 15.590557 1 1 5\n",
+  "P 19.653806 8.001036 2 1 5\n",
+  "P 16.740968 4.853610 2 16 5\n",
+  "P 5.290761 18.737983 1 16 5\n",
+  "P 0.000000 17.234418 0 19 1\n",
+  "P 22.031729 6.357175 0 19 1\n",
+  "P 16.658689 19.463701 0 28 5\n",
+  "P 5.373040 4.127892 0 28 5\n",
+  "P 19.520596 21.548997 0 83 2\n",
+  "P 2.511132 2.042596 0 83 2\n",
+  "P 3.826406 8.028899 0 60 5\n",
+  "P 18.205323 15.562695 0 60 5\n",
+  "F 2 18 2 7 8 1\n",
+  "F 1 18 1 8 8 2\n",
+  "F 2 27 2 3 5 2\n"
+  ]
+
+map275219_30 =
+  [
+  "P 10.963093 10.255790 1 24 5\n",
+  "P 18.766531 18.357256 2 11 5\n",
+  "P 3.159656 2.154324 1 25 5\n",
+  "P 21.241354 6.768781 0 4 2\n",
+  "P 0.684833 13.742798 1 35 2\n",
+  "P 6.455141 15.918761 1 10 1\n",
+  "P 15.471046 4.592819 1 8 1\n",
+  "P 14.149567 20.511580 2 51 5\n",
+  "P 7.776620 0.000000 1 41 5\n",
+  "P 16.572712 14.102863 2 7 2\n",
+  "P 5.353475 6.408717 0 74 2\n",
+  "P 0.000000 5.921174 0 55 4\n",
+  "P 21.926187 14.590406 2 30 4\n",
+  "P 13.399414 11.523454 0 43 3\n",
+  "P 8.526772 8.988126 0 67 3\n",
+  "P 1.571664 3.698954 1 63 4\n",
+  "P 20.354523 16.812626 2 11 4\n",
+  "P 0.370913 15.413870 0 88 1\n",
+  "P 21.555274 5.097710 0 88 1\n",
+  "P 6.474049 4.243127 1 27 3\n",
+  "P 15.452137 16.268453 2 9 3\n",
+  "P 11.278773 3.383705 0 49 3\n",
+  "P 10.647414 17.127874 0 49 3\n",
+  "F 1 31 8 3 16 2\n",
+  "F 1 30 15 7 21 8\n",
+  "F 2 7 20 3 12 2\n",
+  "F 2 9 16 3 11 1\n",
+  "F 2 11 1 3 12 2\n",
+  "F 1 24 0 3 11 1\n",
+  "F 2 5 20 3 12 3\n",
+  "F 2 8 1 3 12 3\n",
+  "F 2 6 16 3 11 2\n",
+  "F 2 7 12 13 10 3\n",
+  "F 2 7 16 13 9 2\n",
+  "F 2 9 1 13 9 2\n",
+  "F 2 9 1 13 9 4\n",
+  "F 2 8 16 13 9 4\n",
+  "F 2 6 20 13 6 1\n",
+  "F 2 7 1 13 9 5\n",
+  "F 2 6 16 13 9 5\n",
+  "F 2 5 16 22 10 7\n",
+  "F 2 6 1 22 9 6\n",
+  "F 2 6 20 22 5 2\n",
+  "F 2 5 9 22 7 4\n",
+  "F 2 6 1 22 9 7\n",
+  "F 1 28 8 22 18 16\n",
+  "F 1 14 0 13 3 1\n",
+  "F 2 5 1 22 9 8\n",
+  "F 2 6 20 22 5 4\n",
+  "F 2 6 16 22 10 9\n",
+  "F 2 5 9 22 7 6\n",
+  "F 1 19 6 3 7 6\n",
+  "F 1 17 5 22 5 4\n",
+  "F 1 22 2 22 17 16\n"
+  ]
     
 -- EOF
