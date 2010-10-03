@@ -63,6 +63,7 @@ import qualified Data.IntMap as IM
 import qualified Data.IntSet as IS
 import Data.Ord (comparing)
 import System.IO
+import System.IO.Error (isEOFError)
 
 -- | Class for values that are owned by a player
 --
@@ -272,7 +273,7 @@ planetById state id' = fromJust $ IM.lookup id' $ gameStatePlanets state
 --
 step :: GameState -> GameState
 step state = state
-    { gameStatePlanets = IM.map grow $ engageAll (gameStatePlanets state) ready
+    { gameStatePlanets = engageAll (IM.map grow $ gameStatePlanets state) ready
     , gameStateFleets = fleets'
     }
   where
@@ -410,7 +411,9 @@ ioBot :: (GameState -> IO ())  -- ^ Bot action
       -> IO ()                 -- ^ Blocks forever
 ioBot f = do
     hSetBuffering stdin NoBuffering
-    loop mempty
+    catch (loop mempty) $ \e -> if isEOFError e
+        then return ()
+        else ioError e
   where
     loop state = do
         line <- takeWhile (/= '#') <$> getLine
